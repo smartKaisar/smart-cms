@@ -102,9 +102,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <configuration>
-          <excludePackageNames>test:testa:testb:testc:com.smartitengineering.demo.cms.dto</excludePackageNames>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -119,6 +116,17 @@
           <workspaceId>p:q</workspaceId>
         </configuration>
         <executions>
+          <execution>
+            <id>generate-pojo-example</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <contentTypeResource>${basedir}/src/main/resources/content-type-example.xml</contentTypeResource>
+              <packageForGuiceMasterModule>com.embarcadero.edn</packageForGuiceMasterModule>
+            </configuration>
+          </execution>
           <execution>
             <id>generate-pojo-file</id>
             <phase>generate-sources</phase>

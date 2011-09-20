@@ -54,6 +54,7 @@ import com.smartitengineering.cms.api.type.ContentDataType;
 import com.smartitengineering.cms.api.type.ContentType;
 import com.smartitengineering.cms.api.type.ContentTypeId;
 import com.smartitengineering.cms.api.type.DataType;
+import com.smartitengineering.cms.api.type.EnumDataType;
 import com.smartitengineering.cms.api.type.FieldDef;
 import com.smartitengineering.cms.api.type.FieldValueType;
 import com.smartitengineering.cms.api.workspace.WorkspaceId;
@@ -542,7 +543,7 @@ public class ContentLoaderImpl implements ContentLoader {
     if (!isValid(content)) {
       return false;
     }
-    if (!checkForRelatedContents(content)) {
+    if (!checkForImpliedValidations(content)) {
       return false;
     }
     if (!isValidByCustomValidators(content)) {
@@ -747,21 +748,49 @@ public class ContentLoaderImpl implements ContentLoader {
     filter.addContentTypeToFilter(instanceOfId);
   }
 
-  protected boolean checkForRelatedContents(Content content) {
+  protected boolean checkForImpliedValidations(Collection<Field> fields) {
     boolean valid = true;
-    for (Field field : content.getFields().values()) {
+    for (Field field : fields) {
       if (field != null && field.getFieldDef() != null) {
         FieldDef def = field.getFieldDef();
         switch (def.getValueDef().getType()) {
           case COLLECTION:
-            if (((CollectionDataType) def.getValueDef()).getItemDataType().getType().equals(FieldValueType.CONTENT)) {
-              DataType contentDataType = ((CollectionDataType) def.getValueDef()).getItemDataType();
+            final CollectionDataType collDataType = (CollectionDataType) def.getValueDef();
+            if (collDataType.getItemDataType().getType().equals(FieldValueType.CONTENT)) {
+              DataType contentDataType = collDataType.getItemDataType();
               for (FieldValue val : ((CollectionFieldValue) field.getValue()).getValue()) {
                 final boolean checkContentTypeValidity = checkContentTypeValidity(val, contentDataType);
                 if (!checkContentTypeValidity && logger.isWarnEnabled()) {
                   logger.warn("Content relation failed in " + field.getName());
                 }
                 valid = valid && checkContentTypeValidity;
+              }
+            }
+            else if (collDataType.getItemDataType().getType().equals(FieldValueType.COMPOSITE)) {
+              for (FieldValue val : ((CollectionFieldValue) field.getValue()).getValue()) {
+                final boolean checkForEnumValidity = checkForImpliedValidations(((CompositeFieldValue) val).getFields().
+                    values());
+                if (!checkForEnumValidity && logger.isWarnEnabled()) {
+                  logger.warn("Composite relation check in collection failed for " + field.getName());
+                }
+                valid = valid && checkForEnumValidity;
+              }
+            }
+            else if (collDataType.getItemDataType().getType().equals(FieldValueType.ENUM)) {
+              EnumDataType enumDataType = (EnumDataType) collDataType.getItemDataType();
+              Collection<String> choices = enumDataType.getChoices();
+              for (FieldValue val : ((CollectionFieldValue) field.getValue()).getValue()) {
+                if (logger.isInfoEnabled()) {
+                  logger.info("Enum field value instance of string field value " + (val instanceof StringFieldValue));
+                }
+                if (val instanceof StringFieldValue) {
+                  String strval = ((StringFieldValue) val).getValue();
+                  final boolean checkForEnumValidity = choices.contains(strval);
+                  if (!checkForEnumValidity && logger.isWarnEnabled()) {
+                    logger.warn("Enum value in collection failed for " + field.getName());
+                  }
+                  valid = valid && checkForEnumValidity;
+                }
               }
             }
             break;
@@ -773,6 +802,26 @@ public class ContentLoaderImpl implements ContentLoader {
             valid = valid && checkContentTypeValidity;
           }
           break;
+          case COMPOSITE: {
+            final boolean checkForEnumValidity = checkForImpliedValidations(((CompositeFieldValue) field.getValue()).
+                getFields().values());
+            if (!checkForEnumValidity && logger.isWarnEnabled()) {
+              logger.warn("Composite relation check in collection failed for " + field.getName());
+            }
+            valid = valid && checkForEnumValidity;
+          }
+          case ENUM: {
+            if (field.getValue() instanceof StringFieldValue) {
+              Collection<String> choices = ((EnumDataType) def.getValueDef()).getChoices();
+              String strval = ((StringFieldValue) field.getValue()).getValue();
+              final boolean checkForEnumValidity = choices.contains(strval);
+              if (!checkForEnumValidity && logger.isWarnEnabled()) {
+                logger.warn("Enum value failed for " + field.getName());
+              }
+              valid = valid && checkForEnumValidity;
+            }
+          }
+          break;
           default:
             break;
         }
@@ -782,6 +831,11 @@ public class ContentLoaderImpl implements ContentLoader {
       }
     }
     return valid;
+  }
+
+  protected boolean checkForImpliedValidations(Content content) {
+    final Collection<Field> values = content.getFields().values();
+    return checkForImpliedValidations(values);
   }
 
   protected boolean checkContentTypeValidity(FieldValue val, DataType contentDataType) {

@@ -25,13 +25,24 @@ import com.google.inject.TypeLiteral;
 import com.google.inject.multibindings.MapBinder;
 import com.google.inject.name.Names;
 import com.smartitengineering.cms.api.common.TemplateType;
+import com.smartitengineering.cms.api.content.template.TypeFieldValidator;
+import com.smartitengineering.cms.api.content.template.TypeRepresentationGenerator;
+import com.smartitengineering.cms.api.content.template.TypeVariationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.GroovyRepresentationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.GroovyValidatorGenerator;
+import com.smartitengineering.cms.api.impl.content.template.GroovyVariationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.JavascriptRepresentationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.JavascriptValidatorGenerator;
+import com.smartitengineering.cms.api.impl.content.template.JavascriptVariationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.RubyRepresentationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.RubyValidatorGenerator;
+import com.smartitengineering.cms.api.impl.content.template.RubyVariationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.VelocityRepresentationGenerator;
+import com.smartitengineering.cms.api.impl.content.template.VelocityVariationGenerator;
 import com.smartitengineering.cms.api.type.ValidatorType;
 import com.smartitengineering.cms.spi.content.RepresentationProvider;
 import com.smartitengineering.cms.spi.content.ValidatorProvider;
 import com.smartitengineering.cms.spi.content.VariationProvider;
-import com.smartitengineering.cms.spi.content.template.TypeFieldValidator;
-import com.smartitengineering.cms.spi.content.template.TypeRepresentationGenerator;
-import com.smartitengineering.cms.spi.content.template.TypeVariationGenerator;
 import com.smartitengineering.cms.spi.impl.content.PersistentRepresentationProviderImpl;
 import com.smartitengineering.cms.spi.impl.content.PersistentVariationProviderImpl;
 import com.smartitengineering.cms.spi.impl.content.RepresentationProviderImpl;
@@ -41,17 +52,6 @@ import com.smartitengineering.cms.spi.impl.content.guice.RepresentationFilterCon
 import com.smartitengineering.cms.spi.impl.content.guice.RepresentationSchemaBaseConfigProvider;
 import com.smartitengineering.cms.spi.impl.content.guice.VariationFilterConfigsProvider;
 import com.smartitengineering.cms.spi.impl.content.guice.VariationSchemaBaseConfigProvider;
-import com.smartitengineering.cms.spi.impl.content.template.GroovyRepresentationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.GroovyValidatorGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.GroovyVariationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.JavascriptRepresentationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.JavascriptValidatorGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.JavascriptVariationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.RubyRepresentationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.RubyValidatorGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.RubyVariationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.VelocityRepresentationGenerator;
-import com.smartitengineering.cms.spi.impl.content.template.VelocityVariationGenerator;
 import com.smartitengineering.cms.spi.impl.content.template.persistent.PersistableResourceDomainIdProviderImpl;
 import com.smartitengineering.cms.spi.impl.content.template.persistent.PersistentRepresentation;
 import com.smartitengineering.cms.spi.impl.content.template.persistent.PersistentVariation;
@@ -110,7 +110,8 @@ public class SPITemplateEngineModule extends PrivateModule {
     bind(new TypeLiteral<com.smartitengineering.dao.common.CommonDao<PersistentRepresentation, TemplateId>>() {
     }).to(new TypeLiteral<CommonDao<PersistentRepresentation, TemplateId>>() {
     }).in(Singleton.class);
-    final TypeLiteral<SchemaInfoProviderImpl<PersistentRepresentation, TemplateId>> rTypeLiteral = new TypeLiteral<SchemaInfoProviderImpl<PersistentRepresentation, TemplateId>>() {
+    final TypeLiteral<SchemaInfoProviderImpl<PersistentRepresentation, TemplateId>> rTypeLiteral =
+                                                                                    new TypeLiteral<SchemaInfoProviderImpl<PersistentRepresentation, TemplateId>>() {
     };
     bind(new TypeLiteral<MergeService<PersistentRepresentation, TemplateId>>() {
     }).to(new TypeLiteral<DiffBasedMergeService<PersistentRepresentation, TemplateId>>() {
@@ -139,7 +140,7 @@ public class SPITemplateEngineModule extends PrivateModule {
     typeVarGenBinder.addBinding(TemplateType.GROOVY).to(GroovyVariationGenerator.class);
     typeVarGenBinder.addBinding(TemplateType.JAVASCRIPT).to(JavascriptVariationGenerator.class);
     typeVarGenBinder.addBinding(TemplateType.VELOCITY).to(VelocityVariationGenerator.class);
-     bind(new TypeLiteral<ObjectRowConverter<PersistentVariation>>() {
+    bind(new TypeLiteral<ObjectRowConverter<PersistentVariation>>() {
     }).to(VariationObjectConverter.class).in(Singleton.class);
     bind(new TypeLiteral<CommonReadDao<PersistentVariation, TemplateId>>() {
     }).to(new TypeLiteral<com.smartitengineering.dao.common.CommonDao<PersistentVariation, TemplateId>>() {
@@ -150,7 +151,8 @@ public class SPITemplateEngineModule extends PrivateModule {
     bind(new TypeLiteral<com.smartitengineering.dao.common.CommonDao<PersistentVariation, TemplateId>>() {
     }).to(new TypeLiteral<CommonDao<PersistentVariation, TemplateId>>() {
     }).in(Singleton.class);
-    final TypeLiteral<SchemaInfoProviderImpl<PersistentVariation, TemplateId>> vTypeLiteral = new TypeLiteral<SchemaInfoProviderImpl<PersistentVariation, TemplateId>>() {
+    final TypeLiteral<SchemaInfoProviderImpl<PersistentVariation, TemplateId>> vTypeLiteral =
+                                                                               new TypeLiteral<SchemaInfoProviderImpl<PersistentVariation, TemplateId>>() {
     };
     bind(new TypeLiteral<SchemaInfoProvider<PersistentVariation, TemplateId>>() {
     }).to(vTypeLiteral).in(Singleton.class);

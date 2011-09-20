@@ -28,9 +28,12 @@ import com.smartitengineering.cms.api.factory.type.WritableContentType;
 import com.smartitengineering.cms.api.impl.type.ContentTypeIdImpl;
 import com.smartitengineering.cms.api.type.CollectionDataType;
 import com.smartitengineering.cms.api.type.CompositeDataType;
+import com.smartitengineering.cms.api.type.ContentCoProcessorDef;
 import com.smartitengineering.cms.api.type.ContentStatus;
 import com.smartitengineering.cms.api.type.ContentType;
+import com.smartitengineering.cms.api.type.ContentType.ContentProcessingPhase;
 import com.smartitengineering.cms.api.type.ContentTypeId;
+import com.smartitengineering.cms.api.type.EnumDataType;
 import com.smartitengineering.cms.api.type.FieldDef;
 import com.smartitengineering.cms.api.type.FieldValueType;
 import com.smartitengineering.cms.api.type.RepresentationDef;
@@ -48,6 +51,8 @@ import com.smartitengineering.cms.client.api.ContentsResource;
 import com.smartitengineering.cms.client.api.FieldResource;
 import com.smartitengineering.cms.client.api.RootResource;
 import com.smartitengineering.cms.client.api.UriTemplateResource;
+import com.smartitengineering.cms.client.api.WorkspaceContentCoProcessorResource;
+import com.smartitengineering.cms.client.api.WorkspaceContentCoProcessorsResource;
 import com.smartitengineering.cms.client.api.WorkspaceContentResouce;
 import com.smartitengineering.cms.client.api.WorkspaceFeedResource;
 import com.smartitengineering.cms.client.api.WorkspaceFriendsResource;
@@ -57,9 +62,12 @@ import com.smartitengineering.cms.client.api.WorkspaceValidatorResource;
 import com.smartitengineering.cms.client.api.WorkspaceValidatorsResource;
 import com.smartitengineering.cms.client.api.WorkspaceVariationResource;
 import com.smartitengineering.cms.client.api.WorkspaceVariationsResource;
+import com.smartitengineering.cms.ws.common.domains.CollectionFieldDef;
 import com.smartitengineering.cms.ws.common.domains.CollectionFieldValue;
+import com.smartitengineering.cms.ws.common.domains.CompositeFieldDef;
 import com.smartitengineering.cms.ws.common.domains.CompositeFieldValue;
 import com.smartitengineering.cms.ws.common.domains.Content;
+import com.smartitengineering.cms.ws.common.domains.EnumFieldDef;
 import com.smartitengineering.cms.ws.common.domains.Field;
 import com.smartitengineering.cms.ws.common.domains.FieldImpl;
 import com.smartitengineering.cms.ws.common.domains.FieldValue;
@@ -68,6 +76,8 @@ import com.smartitengineering.cms.ws.common.domains.OtherFieldValueImpl;
 import com.smartitengineering.cms.ws.common.domains.ResourceTemplateImpl;
 import com.smartitengineering.cms.ws.common.domains.Workspace;
 import com.smartitengineering.cms.ws.common.domains.WorkspaceImpl.WorkspaceIdImpl;
+import com.smartitengineering.cms.ws.common.providers.JacksonJsonProvider;
+import com.smartitengineering.cms.ws.common.providers.TextURIListProvider;
 import com.smartitengineering.dao.hbase.ddl.HBaseTableGenerator;
 import com.smartitengineering.dao.hbase.ddl.config.json.ConfigurationJsonParser;
 import com.smartitengineering.util.bean.guice.GuiceUtil;
@@ -80,6 +90,9 @@ import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.UniformInterfaceException;
 import com.sun.jersey.api.client.WebResource;
+import com.sun.jersey.api.client.config.ClientConfig;
+import com.sun.jersey.api.client.config.DefaultClientConfig;
+import com.sun.jersey.atom.abdera.impl.provider.entity.FeedProvider;
 import com.sun.jersey.core.util.MultivaluedMapImpl;
 import com.sun.jersey.multipart.FormDataMultiPart;
 import java.io.File;
@@ -90,6 +103,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -2449,6 +2463,420 @@ public class AppTest {
     Assert.assertNotNull(typeFeedResource);
     Assert.assertNotNull(typeFeedResource.getStatuses());
     Assert.assertFalse(typeFeedResource.getStatuses().isEmpty());
+  }
+
+  private WorkspaceFeedResource setupEnumWorkspace() {
+    RootResource resource = RootResourceImpl.getRoot(URI.create(ROOT_URI_STRING));
+    resource.get();
+    WorkspaceFeedResource feedResource;
+    try {
+      feedResource = resource.getTemplates().getWorkspaceResource("test", "enums");
+    }
+    catch (Exception ex) {
+      feedResource = null;
+      LOGGER.info("Exception getting feed resoruce", ex);
+    }
+    boolean valid = false;
+    if (feedResource == null) {
+      try {
+        Workspace workspace = resource.createWorkspace(new WorkspaceIdImpl("test", "enums"));
+        feedResource = resource.getTemplates().getWorkspaceResource(workspace.getId().getGlobalNamespace(), workspace.
+            getId().getName());
+        String contentTypeXml = IOUtils.toString(getClass().getClassLoader().getResourceAsStream(
+            "enum/content-type-def-with-enum.xml"));
+        feedResource.getContentTypes().createContentType(contentTypeXml);
+        contentTypeXml = IOUtils.toString(getClass().getClassLoader().getResourceAsStream(
+            "contentcoprocessors/content-type-def-with-enum.xml"));
+        feedResource.getContentTypes().createContentType(contentTypeXml);
+        valid = true;
+      }
+      catch (Exception ex) {
+        LOGGER.error("Error creating test workspace for templates", ex);
+      }
+    }
+    else {
+      valid = true;
+    }
+    Assert.assertTrue(valid);
+    return feedResource;
+  }
+
+  @Test
+  public void testCreateEnumContentType() throws Exception {
+    LOGGER.info("~~~~~~~~~~~~~~~~~~~~~~~~~~ ENUM CONTENT TYPE CREATION ~~~~~~~~~~~~~~~~~~~~~~~~~");
+    WorkspaceFeedResource feedResource = setupEnumWorkspace();
+    com.smartitengineering.cms.api.impl.workspace.WorkspaceIdImpl id =
+                                                                  new com.smartitengineering.cms.api.impl.workspace.WorkspaceIdImpl();
+    id.setGlobalNamespace(feedResource.getWorkspaceNamespace());
+    id.setName(feedResource.getWorkspaceName());
+    ContentTypeIdImpl idImpl = new ContentTypeIdImpl();
+    idImpl.setWorkspace(id);
+    idImpl.setNamespace("enum");
+    idImpl.setName("EnumTest");
+    ContentType type = SmartContentAPI.getInstance().getContentTypeLoader().loadContentType(idImpl);
+    Assert.assertNotNull(type);
+    Map<String, FieldDef> enumFieldDefs = type.getFieldDefs();
+    Assert.assertEquals(5, enumFieldDefs.size());
+    FieldDef directFieldDef = enumFieldDefs.get("directEnumField");
+    Assert.assertNotNull(directFieldDef);
+    LOGGER.debug("+++++++++++++++++++++ Direct Enum CHOICES " +
+        ((EnumDataType) directFieldDef.getValueDef()).getChoices());
+    Assert.assertTrue(((EnumDataType) directFieldDef.getValueDef()).getChoices().contains("1"));
+    Assert.assertTrue(((EnumDataType) directFieldDef.getValueDef()).getChoices().contains("2"));
+    FieldDef collectiveFieldDef = enumFieldDefs.get("collectiveEnumField");
+    Assert.assertNotNull(collectiveFieldDef);
+    Assert.assertTrue(((EnumDataType) ((CollectionDataType) collectiveFieldDef.getValueDef()).getItemDataType()).
+        getChoices().contains("3"));
+    Assert.assertTrue(((EnumDataType) ((CollectionDataType) collectiveFieldDef.getValueDef()).getItemDataType()).
+        getChoices().contains("4"));
+    FieldDef compositedFieldDef = enumFieldDefs.get("compositedEnumField");
+    Assert.assertNotNull(compositedFieldDef);
+    Assert.assertTrue(((EnumDataType) ((CompositeDataType) compositedFieldDef.getValueDef()).getComposedFieldDefs().get(
+                       "enumField").getValueDef()).getChoices().contains("5"));
+    Assert.assertTrue(((EnumDataType) ((CompositeDataType) compositedFieldDef.getValueDef()).getComposedFieldDefs().get(
+                       "enumField").getValueDef()).getChoices().contains("6"));
+    CompositeDataType compositedDataType = (CompositeDataType) ((CollectionDataType) enumFieldDefs.get(
+                                                                "collectiveCompositedEnumField").getValueDef()).
+        getItemDataType();
+    Assert.assertNotNull(compositedFieldDef);
+    Assert.assertTrue(((EnumDataType) compositedDataType.getComposedFieldDefs().get(
+                       "enumField").getValueDef()).getChoices().contains("7"));
+    Assert.assertTrue(((EnumDataType) compositedDataType.getComposedFieldDefs().get(
+                       "enumField").getValueDef()).getChoices().contains("8"));
+    Collection<ContentTypeFeedResource> typeFeeds = feedResource.getContentTypes().getContentTypeFeeds();
+    Assert.assertNotNull(typeFeeds);
+    Assert.assertEquals(2, typeFeeds.size());
+    ContentTypeFeedResource feed = typeFeeds.iterator().next();
+    Collection<com.smartitengineering.cms.ws.common.domains.FieldDef> defs = feed.getFieldDefs();
+    Assert.assertEquals(5, defs.size());
+    Map<String, com.smartitengineering.cms.ws.common.domains.FieldDef> wDefs =
+                                                                       new HashMap<String, com.smartitengineering.cms.ws.common.domains.FieldDef>();
+    for (com.smartitengineering.cms.ws.common.domains.FieldDef def : defs) {
+      wDefs.put(def.getName(), def);
+    }
+    com.smartitengineering.cms.ws.common.domains.FieldDef wDirectFieldDef = wDefs.get("directEnumField");
+    Assert.assertNotNull(wDirectFieldDef);
+    Assert.assertTrue(wDirectFieldDef instanceof EnumFieldDef);
+    Assert.assertTrue(((EnumFieldDef) wDirectFieldDef).getChoices().contains("1"));
+    Assert.assertTrue(((EnumFieldDef) wDirectFieldDef).getChoices().contains("2"));
+    com.smartitengineering.cms.ws.common.domains.FieldDef wCollectiveFieldDef = wDefs.get("collectiveEnumField");
+    Assert.assertNotNull(wCollectiveFieldDef);
+    Assert.assertNotNull(((CollectionFieldDef) wCollectiveFieldDef).getItemDef());
+    Assert.assertTrue(((CollectionFieldDef) wCollectiveFieldDef).getItemDef() instanceof EnumFieldDef);
+    Assert.assertTrue(
+        ((EnumFieldDef) ((CollectionFieldDef) wCollectiveFieldDef).getItemDef()).getChoices().contains("3"));
+    Assert.assertTrue(
+        ((EnumFieldDef) ((CollectionFieldDef) wCollectiveFieldDef).getItemDef()).getChoices().contains("4"));
+    com.smartitengineering.cms.ws.common.domains.FieldDef wCompositedFieldDef = wDefs.get("compositedEnumField");
+    Assert.assertNotNull(wCompositedFieldDef);
+    Assert.assertNotNull(((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField"));
+    Assert.assertTrue(
+        ((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField") instanceof EnumFieldDef);
+    Assert.assertTrue(((EnumFieldDef) ((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField")).
+        getChoices().contains("5"));
+    Assert.assertTrue(((EnumFieldDef) ((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField")).
+        getChoices().contains("6"));
+    wCompositedFieldDef = ((CollectionFieldDef) wDefs.get("collectiveCompositedEnumField")).getItemDef();
+    Assert.assertNotNull(wCompositedFieldDef);
+    Assert.assertNotNull(((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField"));
+    Assert.assertTrue(
+        ((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField") instanceof EnumFieldDef);
+    Assert.assertTrue(((EnumFieldDef) ((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField")).
+        getChoices().contains("7"));
+    Assert.assertTrue(((EnumFieldDef) ((CompositeFieldDef) wCompositedFieldDef).getComposedFields().get("enumField")).
+        getChoices().contains("8"));
+  }
+
+  @Test
+  public void testCreateContentWithEnumField() throws Exception {
+    LOGGER.info("~~~~~~~~~~~~~~~~~~~~~~~~~~ ENUM CONTENT CREATION ~~~~~~~~~~~~~~~~~~~~~~~~~");
+    WorkspaceFeedResource feedResource = setupEnumWorkspace();
+    Properties properties = new Properties();
+    properties.load(getClass().getClassLoader().getResourceAsStream(
+        "enum/form-value.properties"));
+    Set<Object> formKeys = properties.keySet();
+    FormDataMultiPart multiPart = new FormDataMultiPart();
+    for (Object key : formKeys) {
+      multiPart.field(key.toString(), properties.getProperty(key.toString()));
+    }
+    ClientResponse response = feedResource.getContents().post(MediaType.MULTIPART_FORM_DATA, multiPart,
+                                                              ClientResponse.Status.CREATED,
+                                                              ClientResponse.Status.ACCEPTED, ClientResponse.Status.OK);
+    URI uri = response.getLocation();
+    ContentResourceImpl resourceImpl = new ContentResourceImpl(feedResource, uri);
+    final Content lastReadStateOfEntity = resourceImpl.getLastReadStateOfEntity();
+    Assert.assertNotNull(lastReadStateOfEntity);
+    Field field = lastReadStateOfEntity.getFieldsMap().get("directEnumField");
+    String val = field.getValue().getValue();
+    Assert.assertEquals("1", val);
+    field = ((CompositeFieldValue) lastReadStateOfEntity.getFieldsMap().get("compositedEnumField").getValue()).getValues().
+        get("enumField");
+    val = field.getValue().getValue();
+    Assert.assertEquals("5", val);
+    val = ((CollectionFieldValue) lastReadStateOfEntity.getFieldsMap().get("collectiveEnumField").getValue()).getValues().
+        iterator().next().getValue();
+    Assert.assertEquals("4", val);
+    Thread.sleep(SLEEP_DURATION);
+    for (int i = 1; i < 5; ++i) {
+      try {
+        properties = new Properties();
+        properties.load(getClass().getClassLoader().getResourceAsStream(
+            "enum/form-invalid-value-" + i + ".properties"));
+        formKeys = properties.keySet();
+        multiPart = new FormDataMultiPart();
+        for (Object key : formKeys) {
+          multiPart.field(key.toString(), properties.getProperty(key.toString()));
+        }
+        feedResource.getContents().post(MediaType.MULTIPART_FORM_DATA, multiPart, ClientResponse.Status.CREATED,
+                                        ClientResponse.Status.ACCEPTED, ClientResponse.Status.OK);
+        Assert.fail("Invalid content should have failed " + i);
+      }
+      catch (Exception ex) {
+        //Expected that creation fails
+      }
+    }
+  }
+
+  @Test
+  public void testCreateContentCoProcessor() throws Exception {
+
+    ResourceTemplateImpl template = new ResourceTemplateImpl();
+    String temp = "Template";
+    template.setName("rep");
+    final byte[] bytes = temp.getBytes();
+    template.setTemplate(bytes);
+    template.setTemplateType(TemplateType.JAVASCRIPT.toString());
+
+    RootResource resource = RootResourceImpl.getRoot(new URI(ROOT_URI_STRING));
+    Collection<WorkspaceFeedResource> workspaceFeedResources = resource.getWorkspaceFeeds();
+    Iterator<WorkspaceFeedResource> iterator = workspaceFeedResources.iterator();
+    WorkspaceFeedResource feedResource = iterator.next();
+    WorkspaceContentCoProcessorsResource rsrcs = feedResource.getContentCoProcessors();
+    WorkspaceContentCoProcessorResource rsrc = rsrcs.createContentCoProcessor(
+        template);
+    Assert.assertEquals("rep", rsrc.get().getName());
+    Assert.assertEquals(temp, new String(rsrc.get().getTemplate()));
+    Assert.assertEquals(TemplateType.JAVASCRIPT.toString(), rsrc.get().getTemplateType());
+  }
+
+  @Test
+  public void testUpdateContentCoProcessor() throws Exception {
+    LOGGER.info(":::::::::::::: UPDATE CONTENT CO PROCESSOR RESOURCE TEST ::::::::::::::");
+    ResourceTemplateImpl template = new ResourceTemplateImpl();
+    String temp = "newTemplate";
+    final byte[] bytes = temp.getBytes();
+    template.setTemplate(bytes);
+    template.setTemplateType(TemplateType.RUBY.toString());
+
+    RootResource resource = RootResourceImpl.getRoot(new URI(ROOT_URI_STRING));
+    Collection<WorkspaceFeedResource> workspaceFeedResources = resource.getWorkspaceFeeds();
+    Iterator<WorkspaceFeedResource> iterator = workspaceFeedResources.iterator();
+    WorkspaceFeedResource feedResource = iterator.next();
+
+    Collection<WorkspaceContentCoProcessorResource> representationResources = feedResource.getContentCoProcessors().
+        getContentCoProcessorResources();
+    Assert.assertEquals(1, representationResources.size());
+    Iterator<WorkspaceContentCoProcessorResource> representationIterator = representationResources.iterator();
+    WorkspaceContentCoProcessorResource rsrc = representationIterator.next();
+
+    rsrc.update(template);
+    Assert.assertEquals("rep", rsrc.get().getName());
+    Assert.assertEquals(temp, new String(rsrc.get().getTemplate()));
+    Assert.assertEquals(TemplateType.RUBY.toString(), rsrc.get().getTemplateType());
+    resource.getWorkspaceFeeds();
+    WorkspaceContentCoProcessorResource secondRepresentationResource = resource.getWorkspaceFeeds().iterator().next().
+        getContentCoProcessors().getContentCoProcessorResources().iterator().next();
+    template.setTemplateType(TemplateType.JAVASCRIPT.name());
+    secondRepresentationResource.update(template);
+    Assert.assertEquals(TemplateType.JAVASCRIPT.name(), secondRepresentationResource.get().getTemplateType());
+    try {
+      rsrc.update(template);
+      Assert.fail("Should not have been able to update!");
+    }
+    catch (UniformInterfaceException ex) {
+      //Exception expected
+      rsrc.get();
+      rsrc.update(template);
+    }
+  }
+
+  @Test
+  public void testDeleteContentCoProcessor() throws Exception {
+    LOGGER.info(":::::::::::::: DELETE CONTENT CO PROCESSOR RESOURCE TEST ::::::::::::::");
+    ResourceTemplateImpl template = new ResourceTemplateImpl();
+    String temp = "Template2";
+    template.setName("rep2");
+    final byte[] bytes = temp.getBytes();
+    template.setTemplate(bytes);
+    template.setTemplateType(TemplateType.JAVASCRIPT.toString());
+    RootResource resource = RootResourceImpl.getRoot(new URI(ROOT_URI_STRING));
+    Collection<WorkspaceFeedResource> workspaceFeedResources = resource.getWorkspaceFeeds();
+    Iterator<WorkspaceFeedResource> iterator = workspaceFeedResources.iterator();
+    WorkspaceFeedResource feedResource = iterator.next();
+    final WorkspaceContentCoProcessorsResource procsResource = feedResource.getContentCoProcessors();
+
+    Collection<WorkspaceContentCoProcessorResource> rsrcs = procsResource.getContentCoProcessorResources();
+    Assert.assertEquals(1, rsrcs.size());
+    procsResource.createContentCoProcessor(template);
+    Iterator<WorkspaceContentCoProcessorResource> representationIterator = rsrcs.iterator();
+    WorkspaceContentCoProcessorResource rsrc = representationIterator.next();
+
+    rsrc.delete(ClientResponse.Status.ACCEPTED);
+    Collection<WorkspaceContentCoProcessorResource> secRsrcs = resource.getWorkspaceFeeds().iterator().
+        next().getContentCoProcessors().getContentCoProcessorResources();
+    Assert.assertEquals(1, secRsrcs.size());
+  }
+
+  @Test
+  public void testCreateContentTypeWithContentCoProcessors() {
+    WorkspaceFeedResource feedResource = setupEnumWorkspace();
+    com.smartitengineering.cms.api.impl.workspace.WorkspaceIdImpl id =
+                                                                  new com.smartitengineering.cms.api.impl.workspace.WorkspaceIdImpl();
+    id.setGlobalNamespace(feedResource.getWorkspaceNamespace());
+    id.setName(feedResource.getWorkspaceName());
+    ContentTypeIdImpl idImpl = new ContentTypeIdImpl();
+    idImpl.setWorkspace(id);
+    idImpl.setNamespace("enum");
+    idImpl.setName("ContentCoProcessorTest");
+    ContentType type = SmartContentAPI.getInstance().getContentTypeLoader().loadContentType(idImpl);
+    final Map<ContentProcessingPhase, Collection<ContentCoProcessorDef>> contentCoProcessorDefs =
+                                                                         type.getContentCoProcessorDefs();
+    Assert.assertNotNull(contentCoProcessorDefs);
+    Assert.assertFalse(contentCoProcessorDefs.isEmpty());
+    Assert.assertNotNull(contentCoProcessorDefs.get(ContentProcessingPhase.READ));
+    Assert.assertNotNull(contentCoProcessorDefs.get(ContentProcessingPhase.WRITE));
+    Assert.assertFalse(contentCoProcessorDefs.get(ContentProcessingPhase.READ).isEmpty());
+    Assert.assertFalse(contentCoProcessorDefs.get(ContentProcessingPhase.WRITE).isEmpty());
+    Assert.assertEquals(2, contentCoProcessorDefs.get(ContentProcessingPhase.READ).size());
+    Assert.assertEquals(1, contentCoProcessorDefs.get(ContentProcessingPhase.WRITE).size());
+    final Iterator<ContentCoProcessorDef> readItr =
+                                          contentCoProcessorDefs.get(ContentProcessingPhase.READ).iterator();
+    ContentCoProcessorDef def = readItr.next();
+    Assert.assertEquals("testr", def.getName());
+    Assert.assertNull(def.getMIMEType());
+    Assert.assertEquals(0, def.getPriority());
+    Assert.assertEquals(1, def.getParameters().size());
+    Assert.assertEquals("v", def.getParameters().get("k"));
+    Assert.assertEquals("test", def.getResourceUri().getValue());
+    def = readItr.next();
+    Assert.assertEquals("testr1", def.getName());
+    Assert.assertNull(def.getMIMEType());
+    Assert.assertEquals(1, def.getPriority());
+    Assert.assertEquals(1, def.getParameters().size());
+    Assert.assertEquals("v1", def.getParameters().get("k1"));
+    Assert.assertEquals("test1", def.getResourceUri().getValue());
+    def = contentCoProcessorDefs.get(ContentProcessingPhase.WRITE).iterator().next();
+    Assert.assertEquals("testw", def.getName());
+    Assert.assertNull(def.getMIMEType());
+    Assert.assertEquals(0, def.getPriority());
+    Assert.assertEquals(1, def.getParameters().size());
+    Assert.assertEquals("v2", def.getParameters().get("k2"));
+    Assert.assertEquals("test2", def.getResourceUri().getValue());
+  }
+
+  private WorkspaceFeedResource setupContentCoProcessorExecWorkspace() {
+    RootResource resource = RootResourceImpl.getRoot(URI.create(ROOT_URI_STRING));
+    resource.get();
+    WorkspaceFeedResource feedResource;
+    try {
+      feedResource = resource.getTemplates().getWorkspaceResource("test", "enums");
+    }
+    catch (Exception ex) {
+      feedResource = null;
+      LOGGER.info("Exception getting feed resoruce", ex);
+    }
+    boolean valid = false;
+    {
+      try {
+        final WorkspaceIdImpl workspaceId = new WorkspaceIdImpl("test", "enums");
+        if (feedResource == null) {
+
+          Workspace workspace = resource.createWorkspace(workspaceId);
+          feedResource = resource.getTemplates().getWorkspaceResource(workspace.getId().getGlobalNamespace(), workspace.
+              getId().getName());
+        }
+        String contentTypeXml = IOUtils.toString(getClass().getClassLoader().getResourceAsStream(
+            "contentcoprocessors/content-type-def-with-enum-ext.xml"));
+        feedResource.getContentTypes().createContentType(contentTypeXml);
+        ResourceTemplateImpl template = new ResourceTemplateImpl();
+        template.setName("test");
+        template.setTemplate(IOUtils.toByteArray(getClass().getClassLoader().getResourceAsStream(
+            "contentcoprocessors/coprocessor.groovy")));
+        template.setTemplateType("GROOVY");
+        template.setWorkspaceId(workspaceId);
+        feedResource.getContentCoProcessors().createContentCoProcessor(template);
+        valid = true;
+      }
+      catch (Exception ex) {
+        LOGGER.error("Error creating test workspace for templates", ex);
+      }
+    }
+    Assert.assertTrue(valid);
+    return feedResource;
+  }
+
+  @Test
+  public void testCreateContentWithContentCoProcessors() throws Exception {
+    WorkspaceFeedResource feedResource = setupContentCoProcessorExecWorkspace();
+    ClientConfig config = new DefaultClientConfig();
+    config.getClasses().add(JacksonJsonProvider.class);
+    config.getClasses().add(TextURIListProvider.class);
+    config.getClasses().add(FeedProvider.class);
+    Client client = Client.create(config);
+    {
+      final Properties properties = new Properties();
+      properties.load(getClass().getClassLoader().getResourceAsStream(
+          "contentcoprocessors/form-value-write.properties"));
+      Set<Object> formKeys = properties.keySet();
+      FormDataMultiPart multiPart = new FormDataMultiPart();
+      for (Object key : formKeys) {
+        multiPart.field(key.toString(), properties.getProperty(key.toString()));
+      }
+      ClientResponse response =
+                     feedResource.getContents().post(MediaType.MULTIPART_FORM_DATA, multiPart,
+                                                     ClientResponse.Status.CREATED,
+                                                     ClientResponse.Status.ACCEPTED, ClientResponse.Status.OK);
+      URI uri = response.getLocation();
+      ContentResourceImpl resourceImpl = new ContentResourceImpl(feedResource, uri);
+      final Content lastReadStateOfEntity = resourceImpl.getLastReadStateOfEntity();
+      Assert.assertNotNull(lastReadStateOfEntity);
+      Assert.assertNotNull(lastReadStateOfEntity.getFieldsMap().get("directEnumFieldCopy"));
+      Assert.assertNotNull(lastReadStateOfEntity.getFieldsMap().get("dynaField"));
+      Assert.assertEquals(lastReadStateOfEntity.getFieldsMap().get("directEnumField").getValue().getValue(),
+                          lastReadStateOfEntity.getFieldsMap().get("directEnumFieldCopy").getValue().getValue());
+      String dynaField = lastReadStateOfEntity.getFieldsMap().get("dynaField").getValue().getValue();
+      Thread.sleep(SLEEP_DURATION);
+      final Content reReadStateOfEntity = client.resource(resourceImpl.getUri()).accept(MediaType.APPLICATION_JSON).
+          header("Pragma", "no-cache").get(Content.class);
+      Assert.assertEquals(dynaField, reReadStateOfEntity.getFieldsMap().get("dynaField").getValue().getValue());
+    }
+    {
+      final Properties properties = new Properties();
+      properties.load(getClass().getClassLoader().getResourceAsStream(
+          "contentcoprocessors/form-value-read.properties"));
+      Set<Object> formKeys = properties.keySet();
+      FormDataMultiPart multiPart = new FormDataMultiPart();
+      for (Object key : formKeys) {
+        multiPart.field(key.toString(), properties.getProperty(key.toString()));
+      }
+      ClientResponse response =
+                     feedResource.getContents().post(MediaType.MULTIPART_FORM_DATA, multiPart,
+                                                     ClientResponse.Status.CREATED,
+                                                     ClientResponse.Status.ACCEPTED, ClientResponse.Status.OK);
+      URI uri = response.getLocation();
+      ContentResourceImpl resourceImpl = new ContentResourceImpl(feedResource, uri);
+      final Content lastReadStateOfEntity = resourceImpl.getLastReadStateOfEntity();
+      Assert.assertNotNull(lastReadStateOfEntity);
+      Assert.assertNotNull(lastReadStateOfEntity.getFieldsMap().get("directEnumFieldCopy"));
+      Assert.assertNotNull(lastReadStateOfEntity.getFieldsMap().get("dynaField"));
+      Assert.assertEquals(lastReadStateOfEntity.getFieldsMap().get("directEnumField").getValue().getValue(),
+                          lastReadStateOfEntity.getFieldsMap().get("directEnumFieldCopy").getValue().getValue());
+      String dynaField = lastReadStateOfEntity.getFieldsMap().get("dynaField").getValue().getValue();
+      Thread.sleep(SLEEP_DURATION);
+      final Content reReadStateOfEntity = client.resource(resourceImpl.getUri()).accept(MediaType.APPLICATION_JSON).
+          header("Pragma", "no-cache").get(Content.class);
+      Assert.assertFalse(dynaField.equals(reReadStateOfEntity.getFieldsMap().get("dynaField").getValue().getValue()));
+    }
   }
 
   public static class ConfigurationModule extends AbstractModule {

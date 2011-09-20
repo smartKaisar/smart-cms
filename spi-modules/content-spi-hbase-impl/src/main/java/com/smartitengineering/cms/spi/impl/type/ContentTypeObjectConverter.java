@@ -22,17 +22,21 @@ import com.smartitengineering.cms.api.factory.SmartContentAPI;
 import com.smartitengineering.cms.api.common.MediaType;
 import com.smartitengineering.cms.api.type.CollectionDataType;
 import com.smartitengineering.cms.api.type.CompositeDataType;
+import com.smartitengineering.cms.api.type.ContentCoProcessorDef;
 import com.smartitengineering.cms.api.type.ContentDataType;
 import com.smartitengineering.cms.api.type.ContentStatus;
 import com.smartitengineering.cms.api.type.ContentType;
 import com.smartitengineering.cms.api.type.ContentTypeId;
 import com.smartitengineering.cms.api.type.DataType;
+import com.smartitengineering.cms.api.type.EnumDataType;
 import com.smartitengineering.cms.api.type.FieldDef;
 import com.smartitengineering.cms.api.type.FieldValueType;
 import com.smartitengineering.cms.api.type.MutableCollectionDataType;
 import com.smartitengineering.cms.api.type.MutableCompositeDataType;
+import com.smartitengineering.cms.api.type.MutableContentCoProcessorDef;
 import com.smartitengineering.cms.api.type.MutableContentDataType;
 import com.smartitengineering.cms.api.type.MutableContentStatus;
+import com.smartitengineering.cms.api.type.MutableEnumDataType;
 import com.smartitengineering.cms.api.type.MutableFieldDef;
 import com.smartitengineering.cms.api.type.MutableOtherDataType;
 import com.smartitengineering.cms.api.type.MutableRepresentationDef;
@@ -55,13 +59,17 @@ import com.smartitengineering.cms.spi.impl.hbase.Utils;
 import com.smartitengineering.cms.spi.type.PersistableContentType;
 import com.smartitengineering.dao.impl.hbase.spi.ExecutorService;
 import com.smartitengineering.dao.impl.hbase.spi.impl.AbstractObjectRowConverter;
+import edu.emory.mathcs.backport.java.util.Collections;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
@@ -78,6 +86,8 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.type.TypeReference;
 
 /**
  *
@@ -96,6 +106,7 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
   public final static byte[] FAMILY_REPRESENTATIONS = Bytes.toBytes("representations");
   public final static byte[] FAMILY_STATUSES = Bytes.toBytes("statuses");
   public final static byte[] FAMILY_TYPE_REPRESENTATIONS = Bytes.toBytes("variants");
+  public final static byte[] FAMILY_CCP = Bytes.toBytes("ccp");
   public final static byte[] CELL_DISPLAY_NAME = Bytes.toBytes("displayName");
   public final static byte[] CELL_PRIMARY_FIELD_NAME = Bytes.toBytes("primaryFieldName");
   public final static byte[] CELL_DEF_TYPE = Bytes.toBytes("defType");
@@ -107,6 +118,8 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
   public final static byte[] CELL_RSRC_MIME_TYPE = Bytes.toBytes("mimeType");
   public final static byte[] CELL_RSRC_URI_TYPE = Bytes.toBytes("resourceUri.type");
   public final static byte[] CELL_RSRC_URI_VAL = Bytes.toBytes("resourceUri.value");
+  public final static byte[] CELL_CCP_PHASE = Bytes.toBytes("ccp.phase");
+  public final static byte[] CELL_CCP_PRIORITY = Bytes.toBytes("ccp.priority");
   public final static byte[] CELL_FIELD_VAL_TYPE = Bytes.toBytes("fieldValType");
   public final static byte[] CELL_FIELD_STANDALONE = Bytes.toBytes("fieldStandalone");
   public final static byte[] CELL_FIELD_DISPLAY_NAME = Bytes.toBytes("fieldDisplayName");
@@ -127,12 +140,14 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
   public final static byte[] CELL_FIELD_CONTENT_TYPE_ID = Bytes.toBytes("typeId");
   public final static byte[] CELL_FIELD_STRING_ENCODING = Bytes.toBytes("encoding");
   public final static byte[] CELL_FIELD_OTHER_MIME_TYPE = Bytes.toBytes("mimeType");
+  public final static byte[] CELL_FIELD_ENUM_CHOICES = Bytes.toBytes("enumChoices");
   public final static byte[] COLON = Bytes.toBytes(":");
   public static final String SPCL_FIELD_DATA_TYPE_PATTERN = ":(" + FieldValueType.COLLECTION.name() + "|" +
       FieldValueType.CONTENT.name() + "|" + FieldValueType.OTHER.name() + "|" + FieldValueType.STRING.name() + "|" +
-      FieldValueType.COMPOSITE.name() + "):(.+)";
+      FieldValueType.COMPOSITE.name() + "|" + FieldValueType.ENUM.name() + "):(.+)";
   public static final String COLLECTION_FIELD_ITEM_DATA_TYPE_PREFIX = ":COLLECTION:" + Bytes.toString(
       CELL_FIELD_COLLECTION_ITEM);
+  private final ObjectMapper mapper = new ObjectMapper();
 
   @Override
   protected String[] getTablesToAttainLock() {
@@ -219,6 +234,41 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
         final RepresentationDef value = entry.getValue();
         final byte[] toBytes = Bytes.add(Bytes.toBytes(entry.getKey()), COLON);
         putResourceDef(put, repFamily, toBytes, value);
+      }
+      /*
+       * Content Co-Processors
+       */
+      if (instance.getMutableContentType().getContentCoProcessorDefs().isEmpty()) {
+        if (logger.isDebugEnabled()) {
+          logger.debug("No content co processor for " + instance.getId());
+        }
+      }
+      else {
+        if (logger.isDebugEnabled()) {
+          logger.debug("Found content co processor for " + instance.getId());
+        }
+        final byte[] ccpFamily = FAMILY_CCP;
+        List<ContentCoProcessorDef> procDefs = new ArrayList<ContentCoProcessorDef>();
+        if (instance.getMutableContentType().getContentCoProcessorDefs().containsKey(
+            ContentType.ContentProcessingPhase.READ)) {
+          procDefs.addAll(instance.getMutableContentType().getContentCoProcessorDefs().get(
+              ContentType.ContentProcessingPhase.READ));
+        }
+        if (instance.getMutableContentType().getContentCoProcessorDefs().containsKey(
+            ContentType.ContentProcessingPhase.WRITE)) {
+          procDefs.addAll(instance.getMutableContentType().getContentCoProcessorDefs().get(
+              ContentType.ContentProcessingPhase.WRITE));
+        }
+        for (ContentCoProcessorDef entry : procDefs) {
+          if (logger.isDebugEnabled()) {
+            logger.debug(new StringBuilder("Putting content co processor def for ").append(entry.getName()).append(
+                " and value ").append(entry.toString()).toString());
+          }
+          final byte[] prefix = Bytes.add(Bytes.toBytes(entry.getName()), COLON);
+          putResourceDef(put, ccpFamily, prefix, entry);
+          put.add(ccpFamily, Bytes.add(prefix, CELL_CCP_PRIORITY), Bytes.toBytes(entry.getPriority()));
+          put.add(ccpFamily, Bytes.add(prefix, CELL_CCP_PHASE), Bytes.toBytes(entry.getPhase().name()));
+        }
       }
       /*
        * Fields
@@ -386,12 +436,20 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
         OtherDataType otherDataType = (OtherDataType) valueDef;
         put.add(FAMILY_FIELDS, Bytes.add(prefix, CELL_FIELD_OTHER_MIME_TYPE), Bytes.toBytes(otherDataType.getMIMEType()));
         break;
+      case ENUM:
+        logger.debug("Working with ENUM Special data type");
+        EnumDataType enumDataType = (EnumDataType) valueDef;
+        put.add(FAMILY_FIELDS, Bytes.add(prefix, CELL_FIELD_ENUM_CHOICES), Bytes.toBytes(mapper.writeValueAsString(
+            enumDataType.getChoices())));
+        break;
     }
   }
 
   protected void putResourceDef(Put put, final byte[] family, final byte[] prefix, final ResourceDef value) {
     put.add(family, Bytes.add(prefix, CELL_RSRC_NAME), Bytes.toBytes(value.getName()));
-    put.add(family, Bytes.add(prefix, CELL_RSRC_MIME_TYPE), Bytes.toBytes(value.getMIMEType()));
+    if (StringUtils.isNotBlank(value.getMIMEType())) {
+      put.add(family, Bytes.add(prefix, CELL_RSRC_MIME_TYPE), Bytes.toBytes(value.getMIMEType()));
+    }
     final ResourceUri resourceUri = value.getResourceUri();
     putResourceUri(put, family, prefix, resourceUri);
     putParams(put, family, prefix, value.getParameters());
@@ -546,6 +604,52 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
         fillResourceDef(qualifier, representationDef, value);
       }
       contentType.getMutableRepresentationDefs().addAll(reps.values());
+      /*
+       * Content Co-Processors
+       */
+      logger.info("Form Content Co-Processors!");
+      NavigableMap<byte[], byte[]> ccpMap = startRow.getFamilyMap(FAMILY_CCP);
+      Map<String, MutableContentCoProcessorDef> ccps = new HashMap<String, MutableContentCoProcessorDef>();
+      for (byte[] keyBytes : ccpMap.navigableKeySet()) {
+        final String key = Bytes.toString(keyBytes);
+        if (logger.isDebugEnabled()) {
+          logger.debug(new StringBuilder("CCP Work with key ").append(key).toString());
+        }
+        final int indexOfFirstColon = key.indexOf(':');
+        final String ccpName = key.substring(0, indexOfFirstColon);
+        final byte[] qualifier = Bytes.toBytes(key.substring(indexOfFirstColon + 1));
+        if (logger.isDebugEnabled()) {
+          logger.debug(new StringBuilder("CCP name ").append(ccpName).toString());
+          logger.debug(new StringBuilder("CCP qualifier ").append(Bytes.toString(qualifier)).toString());
+        }
+        MutableContentCoProcessorDef ccpDef = ccps.get(ccpName);
+        if (ccpDef == null) {
+          logger.debug("Creating new content co processor def and putting to map");
+          ccpDef = SmartContentAPI.getInstance().getContentTypeLoader().createMutableContentCoProcessorDef();
+          ccps.put(ccpName, ccpDef);
+          ccpDef.setName(ccpName);
+        }
+        final byte[] value = ccpMap.get(keyBytes);
+        if (Arrays.equals(qualifier, CELL_CCP_PHASE)) {
+          ccpDef.setPhase(ContentType.ContentProcessingPhase.valueOf(Bytes.toString(value)));
+        }
+        else if (Arrays.equals(qualifier, CELL_CCP_PRIORITY)) {
+          ccpDef.setPriority(Bytes.toInt(value));
+        }
+        else {
+          fillResourceDef(qualifier, ccpDef, value);
+        }
+      }
+      List<MutableContentCoProcessorDef> ccpDefs = new ArrayList<MutableContentCoProcessorDef>(ccps.values());
+      Collections.sort(ccpDefs, new Comparator<ContentCoProcessorDef>() {
+
+        public int compare(ContentCoProcessorDef o1, ContentCoProcessorDef o2) {
+          return o1.getPriority() - o2.getPriority();
+        }
+      });
+      for (MutableContentCoProcessorDef ccpDef : ccpDefs) {
+        contentType.addContentCoProcessorDef(ccpDef);
+      }
       /*
        * Fields
        */
@@ -924,6 +1028,9 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
       case COMPOSITE:
         mutableDataType = SmartContentAPI.getInstance().getContentTypeLoader().createMutableCompositeDataType();
         break;
+      case ENUM:
+        mutableDataType = SmartContentAPI.getInstance().getContentTypeLoader().createMutableEnumDataType();
+        break;
       case OTHER:
       default:
         mutableDataType =
@@ -1045,6 +1152,18 @@ public class ContentTypeObjectConverter extends AbstractObjectRowConverter<Persi
             otherDataType.setMIMEType(Bytes.toString(value));
           }
           break;
+        case ENUM: {
+          logger.debug("Parsing ENUM");
+          MutableEnumDataType enumDataType = (MutableEnumDataType) mutableDataType;
+          if (Arrays.equals(infoKey, CELL_FIELD_ENUM_CHOICES)) {
+            logger.debug("Parsing Enum Choices");
+            final String stringVal = Bytes.toString(value);
+            List<String> list = mapper.readValue(stringVal, new TypeReference<List<String>>() {
+            });
+            enumDataType.setChoices(list);
+          }
+          break;
+        }
       }
     }
     else {

@@ -20,9 +20,11 @@ package com.smartitengineering.cms.type.xml;
 
 import com.smartitengineering.cms.api.impl.type.CollectionDataTypeImpl;
 import com.smartitengineering.cms.api.impl.type.CompositionDataTypeImpl;
+import com.smartitengineering.cms.api.impl.type.ContentCoProcessorDefImpl;
 import com.smartitengineering.cms.api.impl.type.ContentDataTypeImpl;
 import com.smartitengineering.cms.api.impl.type.ContentStatusImpl;
 import com.smartitengineering.cms.api.impl.type.ContentTypeIdImpl;
+import com.smartitengineering.cms.api.impl.type.EnumDataTypeImpl;
 import com.smartitengineering.cms.api.impl.type.FieldDefImpl;
 import com.smartitengineering.cms.api.impl.type.OtherDataTypeImpl;
 import com.smartitengineering.cms.api.impl.type.RepresentationDefImpl;
@@ -36,14 +38,17 @@ import com.smartitengineering.cms.api.type.CollectionDataType;
 import com.smartitengineering.cms.api.type.ContentDataType;
 import com.smartitengineering.cms.api.type.ContentStatus;
 import com.smartitengineering.cms.api.type.ContentType;
+import com.smartitengineering.cms.api.type.ContentType.ContentProcessingPhase;
 import com.smartitengineering.cms.api.type.ContentTypeId;
 import com.smartitengineering.cms.api.type.DataType;
 import com.smartitengineering.cms.api.type.FieldDef;
 import com.smartitengineering.cms.api.type.MutableCollectionDataType;
 import com.smartitengineering.cms.api.type.MutableCompositeDataType;
+import com.smartitengineering.cms.api.type.MutableContentCoProcessorDef;
 import com.smartitengineering.cms.api.type.MutableContentDataType;
 import com.smartitengineering.cms.api.type.MutableContentStatus;
 import com.smartitengineering.cms.api.type.MutableContentType;
+import com.smartitengineering.cms.api.type.MutableEnumDataType;
 import com.smartitengineering.cms.api.type.MutableFieldDef;
 import com.smartitengineering.cms.api.type.MutableOtherDataType;
 import com.smartitengineering.cms.api.type.MutableRepresentationDef;
@@ -62,9 +67,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import nu.xom.Builder;
 import nu.xom.Document;
 import nu.xom.Element;
@@ -108,7 +115,7 @@ public class XmlParser implements XmlConstants {
       Element rootElement = document.getRootElement();
       Elements childRootElements = rootElement.getChildElements();
       for (int j = 0; j < childRootElements.size(); j++) {
-        MutableContentType mutableContent = introspector.createMutableContentType();
+        final MutableContentType mutableContent = introspector.createMutableContentType();
         final Element contentTypeElement = childRootElements.get(j);
         Elements childElements = contentTypeElement.getChildElements();
         String name = parseMandatoryStringElement(contentTypeElement, NAME); //max=1,min=1
@@ -129,6 +136,18 @@ public class XmlParser implements XmlConstants {
         }
         statuses = parseContentStatuses(contentTypeElement, STATUS);
         representationDefs = parseRepresentations(contentTypeElement, REPRESENTATIONS);
+        Map<ContentType.ContentProcessingPhase, List<MutableContentCoProcessorDef>> ccpDefs =
+                                                                                    parseContentCoProcessorDefs(
+            contentTypeElement, CONTENT_CO_PROCESSOR_DEFS);
+        for (Entry<ContentProcessingPhase, List<MutableContentCoProcessorDef>> entry : ccpDefs.entrySet()) {
+          for (MutableContentCoProcessorDef def : entry.getValue()) {
+            def.setPhase(entry.getKey());
+            if (logger.isInfoEnabled()) {
+              logger.info("^^^^^^^^^^^^^^ Adding content co processor to " + contentTypeId);
+            }
+            mutableContent.addContentCoProcessorDef(def);
+          }
+        }
         contentTypeId = parseContentTypeId(contentTypeElement, PARENT, workspaceId);
         String primaryFieldName = parseOptionalStringElement(contentTypeElement, PRIMARY_FIELD);
         if (logger.isInfoEnabled()) {
@@ -386,6 +405,9 @@ public class XmlParser implements XmlConstants {
       else if (StringUtils.equalsIgnoreCase(localName, COMPOSITE)) {
         return parseCompositeDataType(rootElement, parent);
       }
+      else if (StringUtils.equalsIgnoreCase(localName, ENUM)) {
+        return parseEnumDataType(rootElement, parent);
+      }
       else {
         return DataType.INTEGER;
       }
@@ -599,5 +621,87 @@ public class XmlParser implements XmlConstants {
       compositeDataType.getOwnMutableComposition().addAll(fields);
     }
     return compositeDataType;
+  }
+
+  private DataType parseEnumDataType(Element rootElement, FieldDef parent) {
+    MutableEnumDataType enumDataType = new EnumDataTypeImpl();
+    Elements choicesElem = rootElement.getChildElements(ENUM_CHOICE, NAMESPACE);
+    if (choicesElem != null && choicesElem.size() > 0) {
+      int size = choicesElem.size();
+      List<String> list = new ArrayList<String>(size);
+      for (int i = 0; i < size; ++i) {
+        String choice = choicesElem.get(i).getValue();
+        list.add(choice);
+      }
+      enumDataType.setChoices(list);
+    }
+    else {
+      throw new IllegalStateException("There should be at least one choice for enumeration");
+    }
+    return enumDataType;
+  }
+
+  private Map<ContentProcessingPhase, List<MutableContentCoProcessorDef>> parseContentCoProcessorDefs(
+      Element contentTypeElement,
+      String elementName) {
+    Elements elems = contentTypeElement.getChildElements(elementName, NAMESPACE);
+
+    if (elems.size() > 1) {
+      throw new IllegalStateException("More than one " + elementName);
+    }
+    Map<ContentProcessingPhase, List<MutableContentCoProcessorDef>> result =
+                                                                    new EnumMap<ContentProcessingPhase, List<MutableContentCoProcessorDef>>(
+        ContentProcessingPhase.class);
+    if (elems.size() > 0) {
+      Elements elements = elems.get(0).getChildElements(CONTENT_CO_PROCESSOR_READ_PHASE, NAMESPACE);
+      if (elements != null && elements.size() > 0) {
+        List<MutableContentCoProcessorDef> readProcs = parseContentCoProcessors(elements.get(0), CONTENT_CO_PROCESSORS);
+        result.put(ContentProcessingPhase.READ, readProcs);
+      }
+      elements = elems.get(0).getChildElements(CONTENT_CO_PROCESSOR_WRITE_PHASE, NAMESPACE);
+      if (elements != null && elements.size() > 0) {
+        List<MutableContentCoProcessorDef> writeProcs = parseContentCoProcessors(elements.get(0), CONTENT_CO_PROCESSORS);
+        result.put(ContentProcessingPhase.WRITE, writeProcs);
+      }
+    }
+    if (logger.isInfoEnabled()) {
+      logger.info("Returning co processors " + result);
+    }
+    return result;
+  }
+
+  private List<MutableContentCoProcessorDef> parseContentCoProcessors(Element phase, String elementName) {
+    Elements elems = phase.getChildElements(elementName, NAMESPACE);
+    if (elems.size() > 1) {
+      throw new IllegalStateException("More than one " + elementName);
+    }
+    List<MutableContentCoProcessorDef> procs = new ArrayList<MutableContentCoProcessorDef>();
+    if (elems.size() > 0) {
+      MutableContentCoProcessorDef coProc;
+      Elements elements = elems.get(0).getChildElements(CONTENT_CO_PROCESSOR, NAMESPACE);
+      if (logger.isInfoEnabled()) {
+        logger.info(elements.size() + " Co processors");
+      }
+      for (int i = 0; i < elements.size(); i++) {
+        coProc = parseContentCoProcessor(elements.get(i));
+        coProc.setPriority(i);
+        procs.add(coProc);
+      }
+      if (logger.isInfoEnabled()) {
+        logger.info("Returning with " + procs.size() + " co processors");
+      }
+      return procs;
+    }
+    else {
+      return Collections.emptyList();
+    }
+  }
+
+  private MutableContentCoProcessorDef parseContentCoProcessor(Element coProcElem) {
+    MutableContentCoProcessorDef procDef = new ContentCoProcessorDefImpl();
+    procDef.setName(parseMandatoryStringElement(coProcElem, NAME));
+    procDef.setResourceUri(parseUri(coProcElem, URI));
+    procDef.setParameters(parseParams(coProcElem, PARAMS));
+    return procDef;
   }
 }

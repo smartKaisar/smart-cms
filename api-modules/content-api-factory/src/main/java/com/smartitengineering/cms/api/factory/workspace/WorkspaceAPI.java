@@ -20,7 +20,9 @@ package com.smartitengineering.cms.api.factory.workspace;
 
 import com.smartitengineering.cms.api.common.TemplateType;
 import com.smartitengineering.cms.api.content.ContentId;
+import com.smartitengineering.cms.api.content.template.ContentCoProcessor;
 import com.smartitengineering.cms.api.type.ValidatorType;
+import com.smartitengineering.cms.api.workspace.ContentCoProcessorTemplate;
 import com.smartitengineering.cms.api.workspace.RepresentationTemplate;
 import com.smartitengineering.cms.api.workspace.ResourceTemplate;
 import com.smartitengineering.cms.api.workspace.ValidatorTemplate;
@@ -68,6 +70,18 @@ public interface WorkspaceAPI {
 
   VariationTemplate getVariationTemplate(WorkspaceId id, String name);
 
+  void delete(ContentCoProcessorTemplate template);
+
+  ContentCoProcessorTemplate putContentCoProcessorTemplate(WorkspaceId to, String name, TemplateType templateType,
+                                                           InputStream stream) throws IOException;
+
+  ContentCoProcessorTemplate putContentCoProcessorTemplate(WorkspaceId to, String name, TemplateType templateType,
+                                                           byte[] data);
+
+  ContentCoProcessorTemplate getContentCoProcessorTemplate(WorkspaceId id, String name);
+
+  ContentCoProcessor getContentCoProcessor(WorkspaceId id, String name);
+
   WorkspaceId getWorkspaceIdIfExists(String name);
 
   WorkspaceId getWorkspaceIdIfExists(WorkspaceId workspaceId);
@@ -88,11 +102,12 @@ public interface WorkspaceAPI {
 
   public void removeAllVariationTemplates(WorkspaceId workspaceId);
 
+  public void removeAllContentCoProcessorTemplates(WorkspaceId workspaceId);
+
   enum ResourceSortCriteria {
 
     BY_NAME,
-    BY_DATE,
-  }
+    BY_DATE,}
 
   public Collection<String> getRepresentationNames(WorkspaceId id);
 
@@ -105,6 +120,15 @@ public interface WorkspaceAPI {
   public Collection<String> getRepresentationNames(WorkspaceId id, ResourceSortCriteria criteria);
 
   public Collection<String> getVariationNames(WorkspaceId id, ResourceSortCriteria criteria);
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id);
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id, String startPoint, int count);
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id, ResourceSortCriteria criteria);
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id, ResourceSortCriteria criteria, String startPoint,
+                                                       int count);
 
   public Collection<String> getRepresentationNames(WorkspaceId id, ResourceSortCriteria criteria, String startPoint,
                                                    int count);

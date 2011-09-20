@@ -34,5 +34,6 @@ public enum FieldValueType {
   CONTENT,
   COLLECTION,
   COMPOSITE,
+  ENUM,
   OTHER
 }

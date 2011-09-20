@@ -21,6 +21,12 @@
         "familyName": "valInfo"
       },
       {
+        "familyName": "ccpData"
+      },
+      {
+        "familyName": "ccpInfo"
+      },
+      {
         "familyName": "valData"
       },
       {
@@ -64,6 +70,9 @@
       },
       {
         "familyName": "variants"
+      },
+      {
+        "familyName": "ccp"
       }
     ]
   },

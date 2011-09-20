@@ -22,10 +22,13 @@ import com.google.inject.Inject;
 import com.google.inject.name.Named;
 import com.smartitengineering.cms.api.common.TemplateType;
 import com.smartitengineering.cms.api.content.ContentId;
+import com.smartitengineering.cms.api.content.template.ContentCoProcessor;
+import com.smartitengineering.cms.api.content.template.ContentCoProcessorGenerator;
 import com.smartitengineering.cms.api.event.Event;
 import com.smartitengineering.cms.api.event.Event.EventType;
 import com.smartitengineering.cms.api.event.Event.Type;
 import com.smartitengineering.cms.api.factory.SmartContentAPI;
+import com.smartitengineering.cms.api.workspace.ContentCoProcessorTemplate;
 import com.smartitengineering.cms.api.workspace.RepresentationTemplate;
 import com.smartitengineering.cms.api.workspace.ResourceTemplate;
 import com.smartitengineering.cms.api.workspace.ValidatorTemplate;
@@ -43,6 +46,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
@@ -59,6 +63,8 @@ public class WorkspaceAPIImpl implements WorkspaceAPI {
 
   private String globalNamespace;
   private final transient Logger logger = LoggerFactory.getLogger(getClass());
+  @Inject
+  private Map<TemplateType, ContentCoProcessorGenerator> contentCoProcessorGenerators;
 
   @Inject
   public void setGlobalNamespace(@Named("globalNamespace") String globalNamespace) {
@@ -464,5 +470,69 @@ public class WorkspaceAPIImpl implements WorkspaceAPI {
       logger.debug("Returning " + result);
     }
     return result;
+  }
+
+  public void delete(ContentCoProcessorTemplate template) {
+    SmartContentSPI.getInstance().getWorkspaceService().deleteContentCoProcessor(template);
+  }
+
+  public ContentCoProcessorTemplate putContentCoProcessorTemplate(WorkspaceId to, String name, TemplateType templateType,
+                                                                  InputStream stream) throws IOException {
+    return putContentCoProcessorTemplate(to, name, templateType, IOUtils.toByteArray(stream));
+  }
+
+  public ContentCoProcessorTemplate putContentCoProcessorTemplate(WorkspaceId to, String name, TemplateType templateType,
+                                                                  byte[] data) {
+    if (templateType.equals(TemplateType.JASPER) || templateType.equals(TemplateType.VELOCITY)) {
+      throw new IllegalArgumentException("TemplateType not supported for content type co processor");
+    }
+    return SmartContentSPI.getInstance().getWorkspaceService().putContentCoProcessorTemplate(to, name, templateType,
+                                                                                             data);
+  }
+
+  public ContentCoProcessorTemplate getContentCoProcessorTemplate(WorkspaceId id, String name) {
+    return SmartContentSPI.getInstance().getWorkspaceService().getContentCoProcessorTemplate(id, name);
+  }
+
+  public void removeAllContentCoProcessorTemplates(WorkspaceId workspaceId) {
+    SmartContentSPI.getInstance().getWorkspaceService().removeAllContentCoProcessorTemplates(workspaceId);
+  }
+
+  public ContentCoProcessor getContentCoProcessor(WorkspaceId id, String name) {
+    ContentCoProcessorTemplate template = getContentCoProcessorTemplate(id, name);
+    if (template == null) {
+      return null;
+    }
+    ContentCoProcessorGenerator generator = contentCoProcessorGenerators.get(template.getTemplateType());
+    try {
+      return generator.getGenerator(template);
+    }
+    catch (Exception ex) {
+      logger.warn("Could not retrieve processor", ex);
+      return null;
+    }
+  }
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id, ResourceSortCriteria criteria) {
+    final Collection<ContentCoProcessorTemplate> procsWithoutData = SmartContentSPI.getInstance().
+        getWorkspaceService().getContentCoProcessorsWithoutData(id, criteria);
+    return getResourceNames(procsWithoutData);
+  }
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id, ResourceSortCriteria criteria, String startPoint,
+                                                       int count) {
+    if (count == 0 || startPoint == null) {
+      return Collections.emptyList();
+    }
+    List<String> list = new ArrayList<String>(getContentCoProcessorNames(id, criteria));
+    return cutList(list, startPoint, count);
+  }
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id) {
+    return getContentCoProcessorNames(id, ResourceSortCriteria.BY_NAME);
+  }
+
+  public Collection<String> getContentCoProcessorNames(WorkspaceId id, String startPoint, int count) {
+    return getContentCoProcessorNames(id, ResourceSortCriteria.BY_NAME, startPoint, count);
   }
 }

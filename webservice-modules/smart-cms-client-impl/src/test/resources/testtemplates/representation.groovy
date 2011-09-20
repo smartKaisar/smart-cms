@@ -21,7 +21,7 @@
  *
  * @author imyousuf
  */
-class GroovyTestRepresentationGenerator implements com.smartitengineering.cms.spi.content.template.RepresentationGenerator {
+class GroovyTestRepresentationGenerator implements com.smartitengineering.cms.api.content.template.RepresentationGenerator {
 	public String getRepresentationForContent(com.smartitengineering.cms.api.content.Content content, Map<String, String> params) {
     String strVal = content.getFields().get("fieldA").value.value.toString();
     int max = 10;

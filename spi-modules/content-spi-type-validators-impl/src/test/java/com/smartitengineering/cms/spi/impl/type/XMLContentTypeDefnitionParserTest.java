@@ -24,8 +24,12 @@ import com.google.inject.multibindings.MapBinder;
 import com.google.inject.name.Names;
 import com.smartitengineering.cms.api.factory.SmartContentAPI;
 import com.smartitengineering.cms.api.factory.workspace.WorkspaceAPI;
+import com.smartitengineering.cms.api.type.ContentCoProcessorDef;
+import com.smartitengineering.cms.api.type.ContentType.ContentProcessingPhase;
 import com.smartitengineering.cms.api.workspace.WorkspaceId;
 import com.smartitengineering.cms.api.common.MediaType;
+import com.smartitengineering.cms.api.common.TemplateType;
+import com.smartitengineering.cms.api.content.template.ContentCoProcessorGenerator;
 import com.smartitengineering.cms.api.exception.InvalidReferenceException;
 import com.smartitengineering.cms.api.factory.content.ContentLoader;
 import com.smartitengineering.cms.api.impl.PersistableDomainFactoryImpl;
@@ -38,6 +42,7 @@ import com.smartitengineering.cms.api.factory.type.ContentTypeLoader;
 import com.smartitengineering.cms.api.factory.type.WritableContentType;
 import com.smartitengineering.cms.api.impl.content.ContentLoaderImpl;
 import com.smartitengineering.cms.api.type.CompositeDataType;
+import com.smartitengineering.cms.api.type.EnumDataType;
 import com.smartitengineering.cms.api.type.FieldDef;
 import com.smartitengineering.cms.api.type.FieldValueType;
 import com.smartitengineering.cms.api.type.MutableContentStatus;
@@ -66,6 +71,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Properties;
 import org.jmock.Expectations;
 import org.jmock.Mockery;
@@ -490,6 +496,80 @@ public class XMLContentTypeDefnitionParserTest {
   }
 
   @Test
+  public void testParsingEnumFields() throws Exception {
+    Collection<WritableContentType> collection = init("content-type-def-shopping.xml");
+    Assert.assertEquals(6, collection.size());
+    Iterator<WritableContentType> iterator = collection.iterator();
+    boolean foundFieldDef = false;
+    while (iterator.hasNext()) {
+      WritableContentType type = iterator.next();
+      if (type.getContentTypeID().getName().equals("Product")) {
+        foundFieldDef = true;
+        FieldDef enumDef = type.getFieldDefs().get("enumTest");
+        Assert.assertNotNull(enumDef);
+        Assert.assertEquals(FieldValueType.ENUM, enumDef.getValueDef().getType());
+        Assert.assertTrue(enumDef.getValueDef() instanceof EnumDataType);
+        EnumDataType enumDataType = (EnumDataType) enumDef.getValueDef();
+        Collection<String> choices = enumDataType.getChoices();
+        Assert.assertEquals(3, choices.size());
+        Assert.assertTrue(choices.contains(String.valueOf(1)));
+        Assert.assertTrue(choices.contains(String.valueOf(2)));
+        Assert.assertTrue(choices.contains(String.valueOf(3)));
+      }
+    }
+    Assert.assertTrue(foundFieldDef);
+  }
+
+  @Test
+  public void testParsingContentCoProcessors() throws Exception {
+    System.out.println(":::::::::::::::::::::::::: TEST PARSING CONTENT CO PROCESSOR ::::::::::::::::::::::::::");
+    Collection<WritableContentType> collection = init("content-type-def-shopping.xml");
+    Assert.assertEquals(6, collection.size());
+    Iterator<WritableContentType> iterator = collection.iterator();
+    boolean foundFieldDef = false;
+    while (iterator.hasNext()) {
+      WritableContentType type = iterator.next();
+      if (type.getContentTypeID().getName().equals("Author")) {
+        foundFieldDef = true;
+        final Map<ContentProcessingPhase, Collection<ContentCoProcessorDef>> contentCoProcessorDefs =
+                                                                             type.getContentCoProcessorDefs();
+        Assert.assertNotNull(contentCoProcessorDefs);
+        Assert.assertFalse(contentCoProcessorDefs.isEmpty());
+        Assert.assertNotNull(contentCoProcessorDefs.get(ContentProcessingPhase.READ));
+        Assert.assertNotNull(contentCoProcessorDefs.get(ContentProcessingPhase.WRITE));
+        Assert.assertFalse(contentCoProcessorDefs.get(ContentProcessingPhase.READ).isEmpty());
+        Assert.assertFalse(contentCoProcessorDefs.get(ContentProcessingPhase.WRITE).isEmpty());
+        Assert.assertEquals(2, contentCoProcessorDefs.get(ContentProcessingPhase.READ).size());
+        Assert.assertEquals(1, contentCoProcessorDefs.get(ContentProcessingPhase.WRITE).size());
+        final Iterator<ContentCoProcessorDef> readItr =
+                                              contentCoProcessorDefs.get(ContentProcessingPhase.READ).iterator();
+        ContentCoProcessorDef def = readItr.next();
+        Assert.assertEquals("testr", def.getName());
+        Assert.assertNull(def.getMIMEType());
+        Assert.assertEquals(0, def.getPriority());
+        Assert.assertEquals(1, def.getParameters().size());
+        Assert.assertEquals("v", def.getParameters().get("k"));
+        Assert.assertEquals("test", def.getResourceUri().getValue());
+        def = readItr.next();
+        Assert.assertEquals("testr1", def.getName());
+        Assert.assertNull(def.getMIMEType());
+        Assert.assertEquals(1, def.getPriority());
+        Assert.assertEquals(1, def.getParameters().size());
+        Assert.assertEquals("v1", def.getParameters().get("k1"));
+        Assert.assertEquals("test1", def.getResourceUri().getValue());
+        def = contentCoProcessorDefs.get(ContentProcessingPhase.WRITE).iterator().next();
+        Assert.assertEquals("testw", def.getName());
+        Assert.assertNull(def.getMIMEType());
+        Assert.assertEquals(0, def.getPriority());
+        Assert.assertEquals(1, def.getParameters().size());
+        Assert.assertEquals("v2", def.getParameters().get("k2"));
+        Assert.assertEquals("test2", def.getResourceUri().getValue());
+      }
+    }
+    Assert.assertTrue(foundFieldDef);
+  }
+
+  @Test
   public void testParsingCompositeFields() throws Exception {
     Collection<WritableContentType> collection = init("content-type-def-wih-composition.xml");
     Assert.assertEquals(2, collection.size());
@@ -530,7 +610,9 @@ public class XMLContentTypeDefnitionParserTest {
   }
 
   protected Collection<WritableContentType> init() throws Exception {
-    return init("content-type-def-1.xml");
+    final Collection<WritableContentType> init = init("content-type-def-1.xml");
+    Assert.assertEquals(2, init.size());
+    return init;
   }
 
   protected Collection<WritableContentType> init(String classpathResource) throws Exception {
@@ -541,7 +623,6 @@ public class XMLContentTypeDefnitionParserTest {
                                                                                         MediaType.APPLICATION_XML);
     Assert.assertNotNull(collection);
     Assert.assertFalse(collection.isEmpty());
-    Assert.assertEquals(2, collection.size());
     return collection;
   }
 
@@ -580,6 +661,10 @@ public class XMLContentTypeDefnitionParserTest {
       MapBinder<Class, PersistentService> serviceBinder = MapBinder.newMapBinder(binder(), Class.class,
                                                                                  PersistentService.class);
       serviceBinder.addBinding(WritableContentType.class).toInstance(mockery.mock(PersistentService.class));
+      MapBinder<TemplateType, ContentCoProcessorGenerator> ccpgBinder =
+                                                           MapBinder.newMapBinder(binder(), TemplateType.class,
+                                                                                  ContentCoProcessorGenerator.class);
+      ccpgBinder.addBinding(TemplateType.GROOVY).toInstance(mockery.mock(ContentCoProcessorGenerator.class));
       bind(com.smartitengineering.cms.spi.persistence.PersistentServiceRegistrar.class).to(
           PersistentServiceRegistrar.class);
     }

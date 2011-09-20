@@ -1,5 +1,6 @@
 package com.smartitengineering.demo.cms.dto;
 
+import com.embarcadero.edn.Customer;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Inject;
@@ -34,7 +35,6 @@ import java.util.Set;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import junit.framework.Assert;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.eclipse.jetty.server.Handler;
@@ -142,9 +142,15 @@ public class CodeGenerationTest {
       try {
         Workspace workspace = wId.getWorkspae();
         final ContentTypeLoader contentTypeLoader = SmartContentAPI.getInstance().getContentTypeLoader();
-        final Collection<WritableContentType> types;
+        Collection<WritableContentType> types;
         types = contentTypeLoader.parseContentTypes(workspace.getId(), CodeGenerationTest.class.getClassLoader().
             getResourceAsStream("content-type-def-with-composition.xml"),
+                                                    com.smartitengineering.cms.api.common.MediaType.APPLICATION_XML);
+        for (WritableContentType type : types) {
+          type.put();
+        }
+        types = contentTypeLoader.parseContentTypes(workspace.getId(), CodeGenerationTest.class.getClassLoader().
+            getResourceAsStream("content-type-example.xml"),
                                                     com.smartitengineering.cms.api.common.MediaType.APPLICATION_XML);
         for (WritableContentType type : types) {
           type.put();
@@ -236,6 +242,23 @@ public class CodeGenerationTest {
       Assert.assertNull(rPerson);
     }
     Assert.assertEquals(size, nIds.size());
+    sleep();
+  }
+
+  @Test
+  public void testPersistCustomer() {
+    Customer customer = new Customer();
+    final String id = "customer1@testdomain.com";
+    customer.setId(id);
+    customer.setAddress("Test address");
+    customer.setName("Test Customer 1");
+    Injector injector = Guice.createInjector(new com.embarcadero.edn.MasterModule());
+    CommonDao<Customer, String> dao = injector.getInstance(Key.get(new TypeLiteral<CommonDao<Customer, String>>() {
+    }));
+    Assert.assertNotNull(dao);
+    dao.save(customer);
+    Customer readCustomer = dao.getById(id);
+    Assert.assertNotNull(readCustomer);
     sleep();
   }
 

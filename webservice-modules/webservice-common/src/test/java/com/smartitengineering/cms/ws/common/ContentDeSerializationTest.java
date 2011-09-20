@@ -34,7 +34,10 @@ import java.util.Arrays;
 import java.util.Date;
 import junit.framework.TestCase;
 import org.apache.commons.io.IOUtils;
+import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ContentDeSerializationTest extends TestCase {
 
@@ -51,6 +54,7 @@ public class ContentDeSerializationTest extends TestCase {
       "\"status\":\"someStatus\"}";
   private Content content;
   private ObjectMapper mapper;
+  protected transient final Logger logger = LoggerFactory.getLogger(getClass());
 
   @Override
   protected void setUp() throws Exception {
@@ -118,13 +122,21 @@ public class ContentDeSerializationTest extends TestCase {
   public void testSerialization() throws Exception {
     StringWriter writer = new StringWriter();
     mapper.writeValue(writer, content);
-    assertEquals(CONTENT, writer.toString());
+    logger.info("Expected string:\n" + CONTENT);
+    logger.info("Output string:\n" + writer.toString());
+    JsonNode enode =  mapper.readTree(CONTENT);
+    JsonNode onode =  mapper.readTree(writer.toString());
+    assertEquals(enode, onode);
   }
 
   public void testDeserializationWithReserialization() throws Exception {
     StringWriter writer = new StringWriter();
     mapper.writeValue(writer, mapper.readValue(IOUtils.toInputStream(CONTENT), ContentImpl.class));
-    assertEquals(CONTENT, writer.toString());
+    logger.info("Expected string:\n" + CONTENT);
+    logger.info("Output string:\n" + writer.toString());
+    JsonNode enode =  mapper.readTree(CONTENT);
+    JsonNode onode =  mapper.readTree(writer.toString());
+    assertEquals(enode, onode);
   }
 
   public void testCompositeField() throws Exception {

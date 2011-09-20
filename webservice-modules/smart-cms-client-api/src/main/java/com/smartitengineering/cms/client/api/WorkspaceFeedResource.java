@@ -34,6 +34,8 @@ public interface WorkspaceFeedResource extends Resource<Feed> {
   WorkspaceValidatorsResource getValidators();
 
   WorkspaceVariationsResource getVariations();
+  
+  WorkspaceContentCoProcessorsResource getContentCoProcessors();
 
   ContentTypesResource getContentTypes();
 
