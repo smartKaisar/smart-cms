@@ -18,7 +18,6 @@
  */
 package com.smartitengineering.cms.type.xml;
 
-import com.smartitengineering.cms.api.factory.SmartContentAPI;
 import com.smartitengineering.cms.api.impl.type.CollectionDataTypeImpl;
 import com.smartitengineering.cms.api.impl.type.CompositionDataTypeImpl;
 import com.smartitengineering.cms.api.impl.type.ContentDataTypeImpl;
@@ -549,7 +548,6 @@ public class XmlParser implements XmlConstants {
     }
   }
 
-  /********************************** CONFUSED ****************************************/
   protected DataType parseValueDef(Element rootElement, String elementName, FieldDef parent) {
     final Element childNode = getChildNode(rootElement, elementName);
     if (logger.isDebugEnabled()) {
@@ -573,7 +571,6 @@ public class XmlParser implements XmlConstants {
     }
   }
 
-  /************************end of confsion **********************/
   private DataType parseOtherDataType(Element element) {
     MutableOtherDataType type = new OtherDataTypeImpl();
     type.setMIMEType(parseMandatoryStringElement(element, MIME_TYPE));

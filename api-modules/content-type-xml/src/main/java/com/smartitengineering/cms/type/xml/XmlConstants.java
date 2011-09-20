@@ -81,11 +81,11 @@ public interface XmlConstants {
   public String PARENT = "parent";
   public String STATUS_NAME = "statusName";
   public String STATUS = "status";
-  String PRIMARY_FIELD = "primaryField";
-  String DEF_TYPE = "defType";
+  public String PRIMARY_FIELD = "primaryField";
+  public String DEF_TYPE = "defType";
   public String CONTENT_TYPE = "contentType";
   public String NAMESPACE = "http://www.smartitengineering.com/smart-cms/content/content-type-schema";
   public String XSI_NAMESPACE = "http://www.w3.org/2001/XMLSchema-instance";
   public String CONTENT_TYPES = "contentTypes";
-  String ATTR_NAMESPACE = "namespace";
+  public String ATTR_NAMESPACE = "namespace";
 }
