@@ -76,6 +76,11 @@ public class ContentTypeDefinitionValidator {
       if (logger.isDebugEnabled()) {
         logger.error("No ContentType in Parsed XML");
       }
+
+      if (logger.isInfoEnabled()) {
+        logger.info("No ContentType in Parsed XML");
+      }
+
       isValid = false;
     }
     else {
@@ -90,6 +95,11 @@ public class ContentTypeDefinitionValidator {
           if (logger.isDebugEnabled()) {
             logger.error("No Field Definitions in " + contentType.getDisplayName());
           }
+
+          if (logger.isInfoEnabled()) {
+            logger.info("No Field Definitions in " + contentType.getDisplayName());
+          }
+
           isValid = false;
         }
         Iterator<FieldDef> fieldIterator = fieldDefs.iterator();
@@ -99,6 +109,11 @@ public class ContentTypeDefinitionValidator {
             if (logger.isDebugEnabled()) {
               logger.error("Field Def is empty");
             }
+
+            if (logger.isInfoEnabled()) {
+              logger.info("Field Def is empty");
+            }
+
             isValid = false;
           }
           else {
@@ -107,6 +122,11 @@ public class ContentTypeDefinitionValidator {
               if (logger.isDebugEnabled()) {
                 logger.error("Not a valid Value Def. ");
               }
+
+              if (logger.isInfoEnabled()) {
+                logger.info("Not a valid Value Def. ");
+              }
+
               isValid = false;
             }
             else {
@@ -116,19 +136,35 @@ public class ContentTypeDefinitionValidator {
                   if (logger.isDebugEnabled()) {
                     logger.error("Collection value is empty");
                   }
+
+                  if (logger.isInfoEnabled()) {
+                    logger.info("Collection value is empty");
+                  }
+
                   isValid = false;
                 }
                 else if (dataType.getMinSize() > dataType.getMaxSize()) {
                   if (logger.isDebugEnabled()) {
-                    logger.error("MinSize = ( " + dataType.getMinSize() + " ) can not be grater than MaxSize = ( " + dataType.
-                        getMaxSize() + " )");
+                    logger.error("MinSize = ( " + dataType.getMinSize() + " ) can not be grater than MaxSize = ( " +
+                        dataType.getMaxSize() + " )");
                   }
+
+                  if (logger.isInfoEnabled()) {
+                    logger.info("MinSize = ( " + dataType.getMinSize() + " ) can not be grater than MaxSize = ( " +
+                        dataType.getMaxSize() + " )");
+                  }
+
                   isValid = false;
                 }
                 else if (dataType.getItemDataType() == null || dataType.getItemDataType().getType() == null) {
                   if (logger.isDebugEnabled()) {
                     logger.error("Collection's Item type is empty");
                   }
+
+                  if (logger.isInfoEnabled()) {
+                    logger.info("Collection's Item type is empty");
+                  }
+
                   isValid = false;
                 }
                 else if (dataType.getItemDataType().getType().equals(FieldValueType.CONTENT)) {
@@ -154,6 +190,11 @@ public class ContentTypeDefinitionValidator {
       if (logger.isDebugEnabled()) {
         logger.error("Content def inside the collection def can not be empty");
       }
+
+      if (logger.isInfoEnabled()) {
+        logger.info("Content def inside the collection def can not be empty");
+      }
+
       isValid = false;
     }
     else {
@@ -172,6 +213,11 @@ public class ContentTypeDefinitionValidator {
       if (logger.isDebugEnabled()) {
         logger.error("No Parent or Parent is not correct");
       }
+
+      if (logger.isInfoEnabled()) {
+        logger.info("No Parent or Parent is not correct");
+      }
+
       isValid = false;
     }
     else if (SmartContentAPI.getInstance().getContentTypeLoader().loadContentType(typeId) == null && !this.contentTypes.
@@ -179,6 +225,11 @@ public class ContentTypeDefinitionValidator {
       if (logger.isDebugEnabled()) {
         logger.error("Content Type ID does not exist " + typeId);
       }
+
+      if (logger.isInfoEnabled()) {
+        logger.info("Content Type ID does not exist " + typeId);
+      }
+
       isValid = false;
     }
     return isValid;
